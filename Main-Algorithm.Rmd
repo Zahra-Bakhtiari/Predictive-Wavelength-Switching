@@ -9,185 +9,265 @@ site: bookdown::bookdown_site
 knitr::opts_chunk$set(echo = TRUE, message=FALSE, eval = T)
 library(caret); library(stringr); library(dplyr); library(readxl)
 
-library(gtools)
+library(gtools); library(stringr)
+library(dplyr)
 ```
 
 # Index
 
 Predict the value of the gain at other channels by having few input channels
- 
-hello !!!!!!
 
+# Data Preparation
 
-#Read the data 
+## Path and names should be specified here.
 
-<!-- this does not print -->
+```{r}
+# Give the values
+# * directory with data
+data_dir_path <- "./data/"
+# * name of the file with fully loaded bands
+FLB_filename <- "Fully Loaded Band.xlsx"
+# * names of coloumns in files
+col_names <- c("Freq", "wl", "PowerIn", "PowerOut", "Gain")
+```
 
+## Reading data
 
 ```{r data}
-# change the follwing path accordingly. Note that zara3M folder includes Fully Loaded Band.xlsx and Input.xlsx files
-setwd("~/Camp1/idea/zara3M/")
-sss <- dir(".")
-library(stringr)
-www <- str_detect(sss, ".xlsx") 
 
-sss[www]
+#################################################
+# Detecting files with data
+all_files_in_data_dir <- dir(data_dir_path)
+# Choose only excel files
+data_files <- str_subset(all_files_in_data_dir, ".xlsx")
+# List files included
+data_files 
 
+if(exists("tbl_Total")) rm(tbl_Total)
 
-library(dplyr)
-rm(ddf)
-all_gains <- str_c("g_", str_pad(1:80, 2, pad = "0"))
-all_gains2 <- (str_pad(1:80, 2, pad = "0"))
-#make id for each freq
-temp_df <- read_excel("Fully Loaded Band.xlsx", skip = 1)
+# read fully loaded bands file
+tb_FLB <- read_excel(str_c(data_dir_path, FLB_filename), skip = 1)
+names(tb_FLB) <- col_names
 
-names(temp_df) <- c("Freq", "wl", "PowerIn", "PowerOut", "Gain")
+#how many distinct frequencies in fully loaded bands file
+num_FLB <- length(unique(tb_FLB$Freq))
 
-temp_df <- temp_df %>%
-  mutate_each(funs(as.numeric))
+```
 
-freq_map <- temp_df %>%
+## create IDs for frequencies
+
+```{r}
+freq_map <- select(tb_FLB, Freq) %>%
   arrange(Freq) %>%
-  mutate(f_id = all_gains,num_id = all_gains2) %>%
-  select(Freq, f_id,num_id)
+  mutate(freq_text_id = str_c("g_", str_pad(1:num_FLB, 2, pad = "0")),
+         freq_num_id = str_pad(1:num_FLB, 2, pad = "0")) # as.numeric
 
+# checking
 freq_map
+```
 
-for(nn in sss[www][1:5]){
-  temp_df <- read_excel(nn, skip = 1)
-  
+## Calculation of ratios for all data files
 
-  # if excel file has only one col, it was not formated correclty. Correct this in this "if"
-  if(ncol(temp_df) == 1) { 
-    library(tidyr)
-    names(temp_df) <- str_replace(names(temp_df), "\t$", "")
-    temp_df <- temp_df %>%
-      separate_(col = names(temp_df)[1], 
-                into = c("Freq", "wl", "PowerIn", "PowerOut", "Gain"),
-                sep = "\t.", remove = T, convert = T)
-  }
-  
+* Read all files in data folder and combine them to one tibble
+* Perform calculation of ratios
+
+```{r}
+for(cur_file in data_files){
+  temp_df <- read_excel(str_c(data_dir_path, cur_file), skip = 1)
   names(temp_df) <- c("Freq", "wl", "PowerIn", "PowerOut", "Gain")
   
+  # add frequency IDs to corresponding places 
   temp_df <- temp_df %>%
-    mutate_each(funs(as.numeric)) %>%
     full_join(freq_map)
   
-  temp_df$name <- nn
+  # add coloumn containing name of the file
+  temp_df$name <- cur_file
   
-  
-  for(dd in temp_df$f_id){
-    root_gain <- filter(temp_df, f_id == dd) %>% select(Gain) %>% as.numeric()
-    root_freq <- filter(temp_df, f_id == dd) %>% select(Freq) %>% as.numeric()
-
-    temp_df[, str_c(dd, "_over")] <- (10^(temp_df$Gain/10)) / (10^(root_gain/10))
+  # calculate ratios
+  for(id in temp_df$freq_text_id){
+    root_gain <- filter(temp_df, freq_text_id == id) %>% 
+      select(Gain) %>% unlist()
+    temp_df[, str_c(id, "_over")] <- 
+      (10^(temp_df$Gain/10)) / (10^(root_gain/10))
   }
 
-  if(!exists("ddf")) {
+  # put data to one total tibble
+  if(!exists("tbl_Total")) {
     temp_df <- temp_df[, sort(names(temp_df))]
-    ddf <- temp_df
+    tbl_Total <- temp_df
   }else{
-      ddf <- rbind(ddf, temp_df)
+      tbl_Total <- rbind(tbl_Total, temp_df)
       }
-
 }
-
   
 # check validity of results
-ddf %>% filter(g_01_over == 1) %>% select(Freq, name)
-ddf %>% filter(g_15_over == 1) %>% select(Freq, name)
+tbl_Total %>% filter(g_01_over == 1) %>% select(Freq, name)
+tbl_Total %>% filter(g_15_over == 1) %>% select(Freq, name)
 
-# create number of channel coloumn
-ddf <- ddf %>% 
+# create number of channels column (files stored data with various N of chan-s)
+tbl_Total <- tbl_Total %>% 
   group_by(name) %>% 
-  mutate(num_of_chanels = sum(! is.na(Gain))) %>%
+  mutate(num_of_channels = sum(! is.na(Gain))) %>%
   ungroup()
 
-ddf %>% group_by(name) %>% summarise(unique(num_of_chanels))
+# cheking
+tbl_Total %>% group_by(name) %>% summarise(unique(num_of_channels))
+```
 
+# Plots
 
-filter(temp_df, f_id == dd)
-
+```{r}
 library(ggplot2)
 
 # Plot Output power spectrum over channel 45th power with a small power gap between fully loaded band and input channel loading
 
-ggplot(ddf, aes(y= g_45_over, x = Freq)) + 
-  geom_point(aes(color = name, shape = factor(num_of_chanels))) 
+ggplot(tbl_Total, aes(y= g_45_over, x = Freq)) + 
+  geom_point(aes(color = name, shape = factor(num_of_channels)), size = 2) +
+  labs(shape ='Number of Channels') +
+  labs(color ='Data file name') +
+  ylab("Channel Power / Channel 45-th Power")
 
+# make plot interactive
+#library(plotly)
+#ggplotly()
 
-library(plotly)
-ggplotly()
+# try another
+ggplot(tbl_Total, aes(y= g_21_over, x = Freq)) + 
+  geom_point(aes(color = name, shape = factor(num_of_channels)), size = 2)
+```
 
-ggplot(ddf, aes(y= g_64_over, x = Freq)) +
-  geom_point(aes(color = name, shape = factor(num_of_chanels))) 
+# Function
 
-ggplotly()
+## Determine Pre-existing channels in Input
 
+```{r}
+pre_exsit_channels <- tbl_Total %>%
+  filter(name == "Input.xlsx") %>%
+  select(Gain, freq_num_id) %>%
+  filter(!is.na(Gain)) %>%
+  select(freq_num_id) %>%
+  unlist() 
 
+pre_exsit_channels
 
+pr_exsit_ch_names <- str_c("g_", pre_exsit_channels, "_over")
+```
 
-compare_test <- function(ddf, file_1, margin) {
+* Do we need this function?
 
-# By stacking all pre-existing channel in xx file, We make sure the newly proposed channels are not repetitive.
-v = 1
-   
-df_test <<- filter(ddf, name == file_1) %>%
-    select(starts_with("num_id"),starts_with("Freq"), starts_with("f_id"), ends_with("15_over"), ends_with("21_over"), ends_with("27_over"), ends_with("33_over"), ends_with("39_over"), ends_with("45_over"), ends_with("51_over"), ends_with("46_over")) %>% 
-    
-filter((abs(g_15_over - v) < margin) & (abs(g_21_over - v) < margin)& (abs(g_27_over - v) < margin)& (abs(g_33_over - v) < margin)& (abs(g_39_over - v) < margin)& (abs(g_45_over - v) < margin)& (abs(g_51_over - v) < margin)& (abs(g_46_over - v) < margin))
-  df_test
+```{r}
+compare_test <- function(tbl_Total, file_name, margin) {
+  
+  # By stacking all pre-existing channel in xx file, We make sure the newly proposed channels are not repetitive.
+  v = 1
+  
+  myf = function(x){abs(x - v) < margin} # function to apply to filtering condition
+
+  df_temp <- filter(tbl_Total, name == file_name) %>%
+    select(Freq, freq_num_id, freq_text_id,
+           match(pr_exsit_ch_names, names(.))) %>% # selecting col with pre_exist_ch.
+    mutate_each(funs(TF = myf),                    # applying margin condition
+                -Freq, -freq_num_id, -freq_text_id) %>%
+    # take only those rows, where all conditions are TRUE:
+    filter(rowSums(.[, str_detect(names(.), "TF")]) == 
+             sum(str_detect(names(.), "TF"))) %>% 
+    select(-ends_with("TF"))
+  
+  df_temp
 }
-
+ 
+####################
+ 
+#check funtion in action
 df2NotNA <- c("g_15", "g_21", "g_27", "g_33", "g_39", "g_45", "g_51", "g_46")
 #0.01551
-xx <<- compare_test(ddf, sss[www][1], margin = 1) %>%
+xx <- compare_test(tbl_Total, data_files[1], margin = 1) %>%
   #sum_ans <<- sum(xx$g_33_over, na.rm = T)
-  filter(! f_id %in% df2NotNA ) 
+  filter(! freq_text_id %in% df2NotNA ) 
+  
+   
+```
+
+# Setup parameters
+
+* Can we setup them automatically?
 
 
-
+```{r}
 # b parameter defines the number of newly added wavelengths
-b=3 
+b=3
 
 # a parameter defines the number of wavelengths after add events
 a=11
 p=a
-## zz1 defines the total number of pissible combination to pick 3 wavelenths out of 80 (excluing pre-existing wavelengths)
+
+## zz1 defines the total number of possible combination to pick 3 wavelenths out of 80 (excluing pre-existing wavelengths)
 zz1 <-combn(xx$g_15_over, b, simplify=F)
-# zzz2 parameter gives the f_id of the 3 newly proposed channels. Type: zzz2[( k parameter value)]
+
+# zzz2 parameter gives the freq_text_id of the 3 newly proposed channels. Type: zzz2[( k parameter value)]
+
 ###################################################
 ###########Algorithm OUTCOMEs
-zzz2 <-combn(xx$f_id, b, simplify=F)
+zzz2 <-combn(xx$freq_text_id, b, simplify=F)
+
 # zzz4 parameter gives the num-id of the 3 newly proposed channels. Type: zzz4[( k parameter value)]
-zzz4 <-combn(xx$num_id, b, simplify=F)
-# zzz3 parameter gives the frequencies of the 3 newly proposed channels. This paprameter is the main OUTCOME of this algorithm. Type: zzz3[( k parameter value)]
+zzz4 <-combn(xx$freq_num_id, b, simplify=F)
+  # zzz3 parameter gives the frequencies of the 3 newly proposed channels. This paprameter is the main OUTCOME of this algorithm. Type: zzz3[( k parameter value)]
+
 zzz3 <-combn(xx$Freq, b, simplify=F)
 ####################################################
 c<-1
 k<-1
-
+  
 # m paramete defines the gap for diveregence of power between ripples, the ideal value for m is 0.
 m=0.08
-
+  
 m3=m
-############## Algorithm Core 
-
-while(c <= length(zz1)){
- 
-dff3 <<- filter(ddf, name=="Fully Loaded Band.xlsx",(num_id == 15)  | (num_id == 21)| (num_id == 27)| (num_id == 33)| (num_id == 39)| (num_id == 45)| (num_id == 46)| (num_id == 51)| (num_id == as.numeric(zzz4[[k]][1]))| (num_id == as.numeric(zzz4[[k]][2]))| (num_id == as.numeric(zzz4[[k]][3])))
-
-  if (
-    (abs(sum(dff3$g_15_over, na.rm = T) - a) > m3) | (abs(sum(dff3$g_21_over, na.rm = T) - a) > m3)| (abs(sum(dff3$g_46_over, na.rm = T) - a) > m3) | (abs(sum(dff3$g_27_over, na.rm = T) - a) > m3) | (abs(sum(dff3$g_33_over, na.rm = T) - a) > m3) | (abs(sum(dff3$g_39_over, na.rm = T) - a) > m3) | (abs(sum(dff3$g_45_over, na.rm = T) - a) > m3) | (abs(sum(dff3$g_51_over, na.rm = T) - a) > m3)  | (abs(sum(dff3[1:p, str_c(zzz2[[k]][1], "_over")], na.rm = T) - a) > m) | (abs(sum(dff3[1:p, str_c(zzz2[[k]][2], "_over")], na.rm = T) - a) > m) | (abs(sum(dff3[1:p, str_c(zzz2[[k]][3], "_over")], na.rm = T) - a) > m) 
-        
-  ){
-    k <- k+1
-    }    
-   
-
-  c <- c+1
-}
-
-
 
 ```
+
+
+
+```{r}
+
+############## Algorithm Core 
+  
+while(c <= length(zz1)){
+  dff3 <- tbl_Total %>%
+    filter(
+      name == "Fully Loaded Band.xlsx",
+      freq_num_id %in% as.numeric( c(pre_exsit_channels, zzz4[[k]] ) )) 
+    
+  #checking_these_names <- c(pr_exsit_ch_names, str_c(zzz2[[k]], "_over"))
+  
+  condition_check_1 <- dff3 %>%
+    select(match( pr_exsit_ch_names, names(.))) %>%
+    summarize_each(funs( abs( sum(., na.rm = T)-a) > m3 ) ) %>%
+    unlist() %>%
+    sum()
+
+  condition_check_2 <- dff3 %>%
+    select(match( str_c(zzz2[[k]], "_over"), names(.))) %>%
+    filter(row_number() <= p) %>%
+    summarize_each(funs( abs( sum(., na.rm = T)-a) > m ) ) %>%
+    unlist() %>%
+    sum()
+  
+  # "OR" condition - at least 1 is True
+  if (condition_check_1 + condition_check_2 >= 1){k <- k + 1}
+  
+  c <- c + 1
+}
+
+print(c)
+print(k)
+```
+
+# The proposed wawelength 
+
+Based on calculations proposend frequencies are
+
+```{r}
+zzz3[k]
+```
+
