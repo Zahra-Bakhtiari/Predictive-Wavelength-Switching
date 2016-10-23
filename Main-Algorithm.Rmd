@@ -29,6 +29,13 @@ data_dir_path <- "./data/"
 FLB_filename <- "Fully Loaded Band.xlsx"
 # * names of coloumns in files
 col_names <- c("Freq", "wl", "PowerIn", "PowerOut", "Gain")
+
+# number of add-events
+num_add_ev <- 3
+
+# m paramete defines the gap for diveregence of power between ripples, the ideal value for m is 0.
+m=0.08
+
 ```
 
 ## Reading data
@@ -195,10 +202,10 @@ xx <- compare_test(tbl_Total, data_files[1], margin = 1) %>%
 
 ```{r}
 # b parameter defines the number of newly added wavelengths
-b=3
+b=num_add_ev
 
 # a parameter defines the number of wavelengths after add events
-a=11
+a=num_add_ev + length(pre_exsit_channels)
 p=a
 
 ## zz1 defines the total number of possible combination to pick 3 wavelenths out of 80 (excluing pre-existing wavelengths)
@@ -216,12 +223,6 @@ zzz4 <-combn(xx$freq_num_id, b, simplify=F)
 
 zzz3 <-combn(xx$Freq, b, simplify=F)
 ####################################################
-c<-1
-k<-1
-  
-# m paramete defines the gap for diveregence of power between ripples, the ideal value for m is 0.
-m=0.08
-  
 m3=m
 
 ```
@@ -231,7 +232,10 @@ m3=m
 ```{r}
 
 ############## Algorithm Core 
+c<-1
+k<-1
   
+
 while(c <= length(zz1)){
   dff3 <- tbl_Total %>%
     filter(
