@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE, message=FALSE, eval = T, warning = F)
 Loading libraries
 
 ```{r}
-library(stringr); library(dplyr); library(readxl); library(gtools); library(ggplot2)
+library(stringr); library(dplyr); library(readxl); library(ggplot2)
 ```
 
 # The Goal
@@ -186,18 +186,18 @@ ggplot(tb_Total, aes_string(y= pr_exsit_ch_names[which_to_plot], x = "Freq")) +
    ylab(str_c("Channel Power / Channel ", pre_exsit_channels[which_to_plot],"-th Power"))
 ```
 
-If you run in Rstudio, you can uncomment and use the following code bellow to explore all input channels interactively (use settings sign in left top corner). 
+If you work in Rstudio, you can use the code bellow to explore all input channels interactively (use settings sign in left top corner of figure). 
 
-```{r}
-# library(manipulate)
-# manipulate({
-#   ggplot(tb_Total, aes_string(y= pr_exsit_ch_names[which_to_plot], x = "Freq")) +
-#     geom_point(aes(color = data_type, shape = factor(num_of_channels)), size = 2) +
-#     labs(shape ='# of Channels') +
-#     labs(color ='Data') +
-#     ylab(str_c("Channel Power / Channel ", pre_exsit_channels[which_to_plot],"-th Power"))
-# }
-#   , which_to_plot = slider(1, length(pr_exsit_ch_names)))
+```{r, eval=F}
+library(manipulate)
+manipulate({
+  ggplot(tb_Total, aes_string(y= pr_exsit_ch_names[which_to_plot], x = "Freq")) +
+    geom_point(aes(color = data_type, shape = factor(num_of_channels)), size = 2) +
+    labs(shape ='# of Channels') +
+    labs(color ='Data') +
+    ylab(str_c("Channel Power / Channel ", pre_exsit_channels[which_to_plot],"-th Power"))
+}
+  , which_to_plot = slider(1, length(pr_exsit_ch_names)))
 ```
 
 # Calculate recomended frequencies
@@ -235,18 +235,18 @@ avoid_repetitives <- compare_test(tb_Total, load_data = "Full load", margin = 1,
 num_wl_after_add <- num_add_wl + length(pre_exsit_channels)
 
 ## zz1 defines the total number of possible combination to pick num_add_wl wavelenths out of 80 (excluing pre-existing wavelengths)
-zz1 <-combn(avoid_repetitives[, pr_exsit_ch_names[1]] %>% unlist, 
+zz1 <- combn(avoid_repetitives[, pr_exsit_ch_names[1]] %>% unlist, 
             num_add_wl, simplify=F)
 
 # zzz2 parameter gives the freq_text_id of the num_add_wl newly proposed channels. Type: zzz2[( k parameter value)]
-zzz2 <-combn(avoid_repetitives$freq_text_id, num_add_wl, simplify=F)
+zzz2 <- combn(avoid_repetitives$freq_text_id, num_add_wl, simplify=F)
 
 ###########Algorithm OUTCOMEs
 # zzz4 parameter gives the num-id of the num_add_wl newly proposed channels. Type: zzz4[( k parameter value)]
-zzz4 <-combn(avoid_repetitives$freq_num_id, num_add_wl, simplify=F)
+zzz4 <- combn(avoid_repetitives$freq_num_id, num_add_wl, simplify=F)
 
 # zzz3 parameter gives the frequencies of the num_add_wl newly proposed channels. This paprameter is the main OUTCOME of this algorithm. Type: zzz3[( k parameter value)]
-zzz3 <-combn(avoid_repetitives$Freq, num_add_wl, simplify=F)
+zzz3 <- combn(avoid_repetitives$Freq, num_add_wl, simplify=F)
 ####################################################
 ```
 
